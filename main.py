@@ -1,87 +1,90 @@
-import csv
+import csv  # read and write tabular data in CSV format
+import sys
+from tkinter import Tk, Label, Entry, Button
 
+import controller as controller
+import pandas as pd  # библиотека для анализа данных
+
+from matplotlib import pyplot as plt  # для графиков
+import re  # регулярные выражения
 import nltk
-import pandas as pd
-import pylab
 
-from matplotlib import pyplot as plt
-import re
-import nltk
-from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize  # для разбиения на предложения
 
-from nltk.stem import porter
-from nltk.tokenize import word_tokenize
+nltk.download('punkt')  # загрузить все данные nltk
+import numpy as np  # массивы
 
-nltk.download('punkt')
-import numpy as np
+from tkinter.filedialog import askopenfilename
 
-final_stopwords_list = ['a', 'in', 'the', 'to']
+ham_list = list()
+spam_list = list()
 
-col_list = ["v1", "v2"]
-sample = pd.read_csv("sms-spam-corpus.csv", encoding='ISO-8859-1', usecols=col_list)
-size = len(sample)
+columns = ["v1", "v2"]  # надписи над ham/spam и соответствующими им сообщениями
 
-list_for_ham = list()
-list_for_spam = list()
+Tk().withdraw()  # we don't want a full GUI, so keep the root window from appearing
+filename = askopenfilename()  # show an "Open" dialog box and return the path to the selected file
+
+fileReader = pd.read_csv(filename, encoding='ISO-8859-1', usecols=columns)  # считываем из .csv файла
+size = len(fileReader)
+
+stopWords = ['a', 'in', 'to', 'the']
 
 for i in range(size):
-    string = sample.loc[i, 'v2']
+    string = fileReader.loc[i, 'v2']
     string = string.lower()
     string = re.sub(r'[^A-Za-z\s]+', '', string)
-    sample.loc[i, 'v2'] = string
+    fileReader.loc[i, 'v2'] = string  # возвращаем нормализованное слово
     tokens = word_tokenize(string)
-    list_without_stopwords = [k for k in tokens if not k in final_stopwords_list]
-    if str(sample.loc[i, 'v1']) == 'ham':
-        list_for_ham.extend(list_without_stopwords)
-    elif str(sample.loc[i, 'v1']) == 'spam':
-        list_for_spam.extend(list_without_stopwords)
-    string = ' '.join(list_without_stopwords)
-    sample.loc[i, 'v2'] = string
+    no_stopwords_list = [k for k in tokens if not k in stopWords]
+    if str(fileReader.loc[i, 'v1']) == 'ham':
+        ham_list.extend(no_stopwords_list)
+    elif str(fileReader.loc[i, 'v1']) == 'spam':
+        spam_list.extend(no_stopwords_list)
+    string = ' '.join(no_stopwords_list)
+    fileReader.loc[i, 'v2'] = string
 
-sample.to_csv("update_sms-spam-corpus.csv", index=False)
+fileReader.to_csv("update-sms-spam-corpus.csv", index=False)  # нормализированный массив предложений
 
 count_ham_dict = dict()
-for i in list_for_ham:
+for i in ham_list:
     count_ham_dict[i] = count_ham_dict.get(i, 0) + 1
 
 count_spam_dict = dict()
-for i in list_for_spam:
+for i in spam_list:
     count_spam_dict[i] = count_spam_dict.get(i, 0) + 1
 
 words_ham = pd.DataFrame.from_dict(count_ham_dict, orient="index")
 words_spam = pd.DataFrame.from_dict(count_spam_dict, orient="index")
 
-words_ham.to_csv("ham_counting_words.csv")
+words_ham.to_csv("ham_frequency_words.csv")
+words_spam.to_csv("spam_frequency_words.csv")
 
-words_spam.to_csv("spam_counting_words.csv")
-
-with open('sms-spam-corpus.csv', 'r', encoding='ISO-8859-1') as read_file:
-    csv_reader = csv.reader(read_file)
-    spec_chars = "[^a-zA-Z ]"
-    stop_words = ['a', 'in', 'the', 'to']
-    myPorterStemmer = nltk.stem.porter.PorterStemmer()
+with open('update-sms-spam-corpus.csv', 'r', encoding='ISO-8859-1') as read_file:
+    csvReader = csv.reader(read_file)
+    stopWords = ['a', 'in', 'to', 'the']
+    myPorterStemmer = nltk.stem.porter.PorterStemmer()  # стемминг, выбираем основу слова
     str_arrays = []
     ham_array = {}
     spam_array = {}
-    for line in csv_reader:
+    for line in csvReader:
         if line[0] == 'ham':
-            for word in re.sub(spec_chars, '', line[1]).lower().split(" "):
+            for word in line:
                 if word != '':
-                    if word not in stop_words:
+                    if word not in stopWords:
                         ham_array[myPorterStemmer.stem(word)] = ham_array.setdefault(myPorterStemmer.stem(word), 0) + 1
         else:
-            for word in re.sub(spec_chars, '', line[1]).lower().split(" "):
+            for word in line:
                 if word != '':
-                    if word not in stop_words:
+                    if word not in stopWords:
                         spam_array[myPorterStemmer.stem(word)] = spam_array.setdefault(myPorterStemmer.stem(word),
                                                                                        0) + 1
 
     ham_array = dict(sorted(ham_array.items(), key=lambda item: len(item[0]), reverse=True))
-    spam_array = dict(sorted(spam_array.items(), key=lambda item: len(item[0]), reverse=True))
     str_arrays.append(ham_array)
+    spam_array = dict(sorted(spam_array.items(), key=lambda item: len(item[0]), reverse=True))
     str_arrays.append(spam_array)
 
-    with open('sms-all-words.csv', 'w', newline='') as dictionary:
+    with open('sms_all_words.csv', 'w', newline='') as dictionary:
         writer = csv.writer(dictionary)
         writer.writerow(['type', 'word', 'length'])
 
@@ -91,152 +94,111 @@ with open('sms-spam-corpus.csv', 'r', encoding='ISO-8859-1') as read_file:
         for key in str_arrays[1].keys():
             writer.writerow(['spam', key, len(key)])
 
-    with open('sms-ham-dictionary.csv', 'w', newline='') as dictionary:
-        writer = csv.writer(dictionary)
-        writer.writerow(['word', 'frequency'])
+wordsAmount = 0
+countWordsHam = 0
+countWordsSpam = 0
 
-        for key, value in ham_array.items():
-            writer.writerow([key, value])
-
-    with open('sms-spam-dictionary.csv', 'w', newline='') as dictionary:
-        writer = csv.writer(dictionary)
-        writer.writerow(['word', 'frequency'])
-
-        for key, value in spam_array.items():
-            writer.writerow([key, value])
-
-# Calculating total average length of all words
-
-average_length = 0
-total_sum_length = 0
-words_amount = 0
-
-with open('sms-spam-dictionary.csv', 'r') as dictionary:
+with open('ham_frequency_words.csv', 'r') as dictionary:
     reader = csv.reader(dictionary)
     for line in reader:
         if line[0] != 'word':
-            total_sum_length += len(line[0]) * int(line[1].replace('\n', ''))
-            words_amount += int(line[1].replace('\n', ''))
+            wordsAmount += int(line[1].replace('\n', ''))
+            countWordsHam += int(line[1].replace('\n', ''))
 
-with open('sms-ham-dictionary.csv', 'r') as dictionary:
+with open('spam_frequency_words.csv', 'r') as dictionary:
     reader = csv.reader(dictionary)
     for line in reader:
         if line[0] != 'word':
-            total_sum_length += len(line[0]) * int(line[1].replace('\n', ''))
-            words_amount += int(line[1].replace('\n', ''))
+            wordsAmount += int(line[1].replace('\n', ''))
+            countWordsSpam += int(line[1].replace('\n', ''))
 
-average_length = total_sum_length / words_amount
+pHam = countWordsHam / wordsAmount
+pSpam = countWordsSpam / wordsAmount
 
-# Creating plot with normalized words lengths and average length
-
-all_words = pd.read_csv('sms-all-words.csv')
+all_words = pd.read_csv('sms_all_words.csv')
 hams = all_words[all_words.type == 'ham']
 spams = all_words[all_words.type == 'spam']
 
-update_count_ham_dict = dict(sorted(count_ham_dict.items(), key=lambda x: x[1], reverse=True)[:20])
-labels, values = zip(*update_count_ham_dict.items())
-indexes = np.arange(len(labels))
-plt.rcParams["figure.autolayout"] = True
-plt.bar(indexes, values, align='center')
-plt.xticks(indexes + 0.5, labels, rotation=90)
-plt.savefig('output/ham_repeated_words')
-plt.show()
-plt.clf()
+window = Tk()
+window.title("Second lab")
+window.configure(background="purple")
+window.columnconfigure([0, 1, 2, 3, 4, 5, 6], minsize=500)
+window.rowconfigure([0, 1, 2, 3, 4, 5, 6], minsize=50)
+window.rowconfigure([6], minsize=150)
+window.geometry('500x400')
+window.resizable(width=False, height=False)
+lbl = Label(window, text="Введите слово:", font=("Ghotam Pro", 14))
+lbl.grid(column=0, row=0)
 
-update_count_spam_dict = dict(sorted(count_spam_dict.items(), key=lambda x: x[1], reverse=True)[:20])
-labels, values = zip(*update_count_spam_dict.items())
-indexes = np.arange(len(labels))
-plt.rcParams["figure.autolayout"] = True
-plt.bar(indexes, values, align='center')
-plt.xticks(indexes + 0.5, labels, rotation=90)
-plt.savefig('output/spam_repeated_words')
-plt.show()
-plt.clf()
+txt = Entry(window, width=20)
+txt.grid(column=0, row=1)
 
-# Calculating total average length of all words
+lbl2 = Label(window, font=("Ghotam Pro", 14))
+lbl3 = Label(window, font=("Ghotam Pro", 14))
+lbl4 = Label(window, font=("Ghotam Pro", 14))
 
-average_length = 0
-total_sum_length = 0
-words_amount = 0
 
-with open('sms-spam-dictionary.csv', 'r') as dictionary:
-    reader = csv.reader(dictionary)
-    for line in reader:
-        if line[0] != 'word':
-            total_sum_length += len(line[0]) * int(line[1].replace('\n', ''))
-            words_amount += int(line[1].replace('\n', ''))
+def clicked():
+    spam_probability = 0
+    ham_probability = 0
+    num_in_ham = 0
+    num_in_spam = 0
 
-with open('sms-ham-dictionary.csv', 'r') as dictionary:
-    reader = csv.reader(dictionary)
-    for line in reader:
-        if line[0] != 'word':
-            total_sum_length += len(line[0]) * int(line[1].replace('\n', ''))
-            words_amount += int(line[1].replace('\n', ''))
+    res = txt.get()
 
-average_length = total_sum_length / words_amount
+    with open('ham_frequency_words.csv', 'r') as dictionary:
+        reader = csv.reader(dictionary)
+        for word in res:
+            for line in reader:
+                if line[0] == word:
+                    num_in_ham += int(line[1])
 
-# Creating plot with normalized words lengths and average length
+    print(num_in_ham)
+    with open('spam_frequency_words.csv', 'r') as dictionary:
+        reader = csv.reader(dictionary)
+        for word in res:
+            for line in reader:
+                if line[0] == word:
+                    num_in_spam += int(line[1])
+    print(num_in_spam)
+    # for word in res:
+    #     for line in ham_list:
+    #         if line[0] != 'word':
+    #             if line[0] == word:
+    #                 num_in_ham = line[1]
+    #
+    # for word in res:
+    #     for line in spam_list:
+    #         if line[0] != 'word':
+    #             if line[0] == word:
+    #                 num_in_spam = line[1]
 
-all_words = pd.read_csv('sms-all-words.csv')
-hams = all_words[all_words.type == 'ham']
-spams = all_words[all_words.type == 'spam']
+    spam_probability *= (num_in_spam + 1) / pSpam
+    ham_probability *= (num_in_ham + 1) / pHam
 
-pylab.plot(range(len(hams)), hams.length / total_sum_length)
-pylab.plot(range(len(spams)), spams.length / total_sum_length)
-pylab.plot(range(len(hams)), hams.length * 0 + average_length / total_sum_length)
-pylab.title('Words lengths')
-pylab.ylabel("length")
-pylab.legend(['ham', 'spam', 'average'])
+    if spam_probability > ham_probability:
+        lbl2.configure(text="Spam")
+        lbl2.grid(column=0, row=3)
+    else:
+        lbl2.configure(text="Ham")
+        lbl2.grid(column=0, row=3)
 
-# Getting ham and spam messages
-# and creating arrays of normalized messages lengths
-# and calculating average length of all messages
+    lbl3.configure(text="Spam: %d" % spam_probability)
+    lbl4.configure(text="Ham: %d" % ham_probability)
+    lbl3.grid(column=0, row=4)
+    lbl4.grid(column=0, row=5)
 
-all_messages = pd.read_csv('sms-spam-corpus.csv', encoding='ISO-8859-1')
-ham_messages = all_messages[all_messages.v1 == 'ham']
-spam_messages = all_messages[all_messages.v1 == 'spam']
-ham_messages_lengths = [len(m) for m in ham_messages.v2]
-spam_messages_lengths = [len(m) for m in spam_messages.v2]
-ham_messages_lengths = sorted(ham_messages_lengths, reverse=True)
-spam_messages_lengths = sorted(spam_messages_lengths, reverse=True)
-average_message_length = 0
-total_messages_length = 0
-number_of_messages = len(ham_messages) + len(spam_messages)
 
-for length in ham_messages_lengths:
-    total_messages_length += length
+btn = Button(window, text="Поиск", command=clicked)
+btn.grid(column=0, row=2)
 
-for length in spam_messages_lengths:
-    total_messages_length += length
 
-for i, length in enumerate(ham_messages_lengths):
-    ham_messages_lengths[i] = length / total_messages_length
+def quit_program():
+    window.destroy()
+    sys.exit()
 
-for i, length in enumerate(spam_messages_lengths):
-    spam_messages_lengths[i] = length / total_messages_length
 
-average_message_length = total_messages_length / number_of_messages
+button3 = Button(window, text="Выход", command=quit_program)
+button3.grid(column=0, row=6)
 
-# Creating plot with normalized messages lengths and average length
-
-x = np.linspace(0, len(ham_messages), len(ham_messages))
-
-plt.plot(range(len(hams)), hams.length / total_sum_length)
-plt.plot(range(len(spams)), spams.length / total_sum_length)
-plt.plot(range(len(hams)), hams.length * 0 + average_length / total_sum_length)
-plt.title('Words lengths')
-plt.ylabel("length")
-plt.legend(['ham', 'spam', 'average'])
-plt.savefig('output/1task_diagram')
-plt.show()
-plt.clf()
-
-plt.plot(range(len(ham_messages)), ham_messages_lengths)
-plt.plot(range(len(spam_messages)), spam_messages_lengths)
-plt.plot(x, x * 0 + average_message_length / total_messages_length)
-plt.title('Messages lengths')
-plt.ylabel("length")
-plt.legend(['ham', 'spam', 'average'])
-plt.savefig('output/2task_diagram')
-plt.show()
-plt.clf()
+window.mainloop()
