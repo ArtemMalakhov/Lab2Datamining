@@ -121,11 +121,11 @@ spams = all_words[all_words.type == 'spam']
 
 window = Tk()
 window.title("Second lab")
-window.configure(background="purple")
-window.columnconfigure([0, 1, 2, 3, 4, 5, 6], minsize=500)
-window.rowconfigure([0, 1, 2, 3, 4, 5, 6], minsize=50)
-window.rowconfigure([6], minsize=150)
-window.geometry('500x400')
+window.configure(background="steelblue")
+window.columnconfigure([0, 1, 2, 3, 6], minsize=500)
+window.rowconfigure([0, 1, 2], minsize=40)
+window.rowconfigure([3, 6], minsize=100)
+window.geometry('500x300')
 window.resizable(width=False, height=False)
 lbl = Label(window, text="Введите слово:", font=("Ghotam Pro", 14))
 lbl.grid(column=0, row=0)
@@ -139,54 +139,74 @@ lbl4 = Label(window, font=("Ghotam Pro", 14))
 
 
 def clicked():
-    spam_probability = 0
-    ham_probability = 0
-    num_in_ham = 0
-    num_in_spam = 0
+    ham_dictionary = pd.read_csv('ham_frequency_words.csv', header=None, index_col=0, squeeze=True).to_dict()
+    spam_dictionary = pd.read_csv('spam_frequency_words.csv', header=None, index_col=0, squeeze=True).to_dict()
 
-    res = txt.get()
+    # получение слов и их обработка
+    extracted_words = str(txt.get())
+    processed_words = []
+    for word in re.sub(r'[^A-Za-z\s]+', '', extracted_words).lower().split(" "):
+        if word != '':
+            if word not in stopWords:
+                processed_words.append(word)
 
-    with open('ham_frequency_words.csv', 'r') as dictionary:
-        reader = csv.reader(dictionary)
-        for word in res:
-            for line in reader:
-                if line[0] == word:
-                    num_in_ham += int(line[1])
+    p_text_ham = 1
+    p_text_spam = 1
+    counter_unknown_ham = 0
+    counter_unknown_spam = 0
+    all_hams = 0
+    all_spams = 0
 
-    print(num_in_ham)
-    with open('spam_frequency_words.csv', 'r') as dictionary:
-        reader = csv.reader(dictionary)
-        for word in res:
-            for line in reader:
-                if line[0] == word:
-                    num_in_spam += int(line[1])
-    print(num_in_spam)
-    # for word in res:
-    #     for line in ham_list:
-    #         if line[0] != 'word':
-    #             if line[0] == word:
-    #                 num_in_ham = line[1]
-    #
-    # for word in res:
-    #     for line in spam_list:
-    #         if line[0] != 'word':
-    #             if line[0] == word:
-    #                 num_in_spam = line[1]
+    for frequency in ham_dictionary.values():
+        all_hams += int(frequency)
 
-    spam_probability *= (num_in_spam + 1) / pSpam
-    ham_probability *= (num_in_ham + 1) / pHam
+    for frequency in spam_dictionary.values():
+        all_spams += int(frequency)
 
-    if spam_probability > ham_probability:
-        lbl2.configure(text="Spam")
+    # кількість повідомлень з категорії ham / загальна кількість повідомлень
+    p_ham = all_hams / (all_spams + all_hams)
+    # кількість повідомлень з категорії spam / загальна кількість повідомлень
+    p_spam = all_spams / (all_spams + all_hams)
+
+    # подсчет количества неизвестных HAM и SPAM
+    for word in processed_words:
+        if word not in ham_dictionary.keys():
+            counter_unknown_ham += 1
+        if word not in spam_dictionary.keys():
+            counter_unknown_spam += 1
+
+    # расчет возможностей
+    for word in processed_words:
+        number_of_words_repeating = 0
+
+        # подсчет количества слов, повторяющихся в словаре HAM
+        if word in ham_dictionary.keys():
+            number_of_words_repeating = int(ham_dictionary[word])
+
+        # (кількість word1 які належать категорії ham + 1) / (загальна кількість слів,
+        # які належать категорії ham +кількість слів, яких немає в навчальній вибірці)
+        p_text_ham *= (number_of_words_repeating + 1) / (len(ham_dictionary) + counter_unknown_ham)
+
+        # подсчет количества повторений слов в словаре SPAM
+        if word in spam_dictionary.keys():
+            number_of_words_repeating = int(spam_dictionary[word])
+        lbl4 = Label(window, font=("Ghotam Pro", 14))
+        lbl4.configure(text=number_of_words_repeating)
+        lbl4.grid(column=0, row=4)
+        # (кількість word1 які належать категорії spam + 1) / (загальна кількість слів,
+        # які належать категорії spam +кількість слів, яких немає в навчальній вибірці)
+        p_text_spam *= (number_of_words_repeating + 1) / (len(spam_dictionary) + counter_unknown_spam)
+
+    p_text_ham *= p_ham    # P(ham | text)   = P(ham) * P(text | ham) / P(text)
+    p_text_spam *= p_spam  # P(spam | text) = P(spam) * P(text | spam) / P(text)
+
+    # результат
+    if p_text_ham > p_text_spam:
+        lbl2.configure(text='Ham\n' + 'p(ham) = ' + str(p_text_ham) + '\np(spam) = ' + str(p_text_spam))
         lbl2.grid(column=0, row=3)
     else:
-        lbl2.configure(text="Ham")
+        lbl2.configure(text='Spam\n' + 'p(ham) = ' + str(p_text_ham) + '\np(spam) = ' + str(p_text_spam))
         lbl2.grid(column=0, row=3)
-
-    lbl3.configure(text="Spam: %d" % spam_probability)
-    lbl4.configure(text="Ham: %d" % ham_probability)
-    lbl3.grid(column=0, row=4)
-    lbl4.grid(column=0, row=5)
 
 
 btn = Button(window, text="Поиск", command=clicked)
